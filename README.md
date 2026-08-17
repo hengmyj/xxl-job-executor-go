@@ -16,6 +16,15 @@
 12.支持 GLUE(PHP)：PHP Fatal/Warning/未捕获异常/非0退出码会失败回调并停止任务
 ```
 
+# 编译 / 运行
+```
+./build.sh          # 编译示例执行器到 bin/xxl-job-executor
+./run.sh            # 编译（如需要）并启动
+./run.sh --rebuild  # 强制重新编译后启动
+make build && make run
+```
+常用环境变量：`XXL_JOB_ADMIN`、`XXL_EXECUTOR_PORT`、`XXL_REGISTRY_KEY`、`XXL_PHP_BIN`。详见 `./run.sh --help`。
+
 # Example
 ```
 package main

@@ -301,8 +301,6 @@ func (e *executor) registry() {
 
 // 执行器注册摘除
 func (e *executor) registryRemove() {
-	t := time.NewTimer(time.Second * 0) //初始立即执行
-	defer t.Stop()
 	req := &Registry{
 		RegistryGroup: "EXECUTOR",
 		RegistryKey:   e.opts.RegistryKey,
@@ -311,14 +309,20 @@ func (e *executor) registryRemove() {
 	param, err := json.Marshal(req)
 	if err != nil {
 		e.log.Error("执行器摘除失败:" + err.Error())
+		return
 	}
 	res, err := e.post("/api/registryRemove", string(param))
 	if err != nil {
 		e.log.Error("执行器摘除失败:" + err.Error())
+		return
 	}
+	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		e.log.Error("执行器摘除失败:" + err.Error())
+		return
+	}
 	e.log.Info("执行器摘除成功:" + string(body))
-	_ = res.Body.Close()
 }
 
 // 回调任务列表

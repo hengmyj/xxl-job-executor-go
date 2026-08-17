@@ -2,19 +2,23 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	xxl "github.com/xxl-job/xxl-job-executor-go"
 	"github.com/xxl-job/xxl-job-executor-go/example/task"
-	"log"
 )
 
 func main() {
 	exec := xxl.NewExecutor(
-		xxl.ServerAddr("http://127.0.0.1/xxl-job-admin"),
-		xxl.AccessToken(""),            //请求令牌(默认为空)
-		xxl.ExecutorIp("127.0.0.1"),    //可自动获取
-		xxl.ExecutorPort("9999"),       //默认9999（非必填）
-		xxl.RegistryKey("golang-jobs"), //执行器名称
-		xxl.SetLogger(&logger{}),       //自定义日志
+		xxl.ServerAddr(getenv("XXL_JOB_ADMIN", "http://127.0.0.1/xxl-job-admin")),
+		xxl.AccessToken(getenv("XXL_JOB_ACCESS_TOKEN", "")),
+		xxl.ExecutorIp(getenv("XXL_EXECUTOR_IP", "127.0.0.1")),
+		xxl.ExecutorPort(getenv("XXL_EXECUTOR_PORT", "9999")),
+		xxl.RegistryKey(getenv("XXL_REGISTRY_KEY", "golang-jobs")),
+		xxl.PHPBin(getenv("XXL_PHP_BIN", "php")),
+		xxl.LogDir(getenv("XXL_LOG_DIR", "")),
+		xxl.SetLogger(&logger{}),
 	)
 	exec.Init()
 	//设置日志查看handler
@@ -30,10 +34,19 @@ func main() {
 	exec.RegTask("task.test", task.Test)
 	exec.RegTask("task.test2", task.Test2)
 	exec.RegTask("task.panic", task.Panic)
-	log.Fatal(exec.Run())
+	if err := exec.Run(); err != nil {
+		log.Fatal(err)
+	}
 }
 
-//xxl.Logger接口实现
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// xxl.Logger接口实现
 type logger struct{}
 
 func (l *logger) Info(format string, a ...interface{}) {
