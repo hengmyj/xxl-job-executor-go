@@ -6,8 +6,10 @@ import (
 	"runtime/debug"
 )
 
-// TaskFunc 任务执行函数
-type TaskFunc func(cxt context.Context, param *RunReq) string
+// TaskFunc 任务执行函数。
+// 返回的 error 不为 nil 时，执行器会以 handleCode=500 回调调度中心，任务判定失败并停止。
+// 仅返回 msg 且 error 为 nil 时视为成功（handleCode=200）。
+type TaskFunc func(cxt context.Context, param *RunReq) (msg string, err error)
 
 // Task 任务
 type Task struct {
@@ -23,19 +25,39 @@ type Task struct {
 	log Logger
 }
 
-// Run 运行任务
+// Run 运行任务。PHP/脚本内部报错必须通过 error 或非 0 退出码传到这里，才能失败回调并停止任务。
 func (t *Task) Run(callback func(code int64, msg string)) {
-	defer func(cancel func()) {
-		if err := recover(); err != nil {
-			t.log.Info(t.Info()+" panic: %v", err)
-			debug.PrintStack() //堆栈跟踪
-			callback(500, "task panic:"+fmt.Sprintf("%v", err))
-			cancel()
+	defer func() {
+		if t.Cancel != nil {
+			t.Cancel()
 		}
-	}(t.Cancel)
-	msg := t.fn(t.Ext, t.Param)
-	callback(200, msg)
-	return
+	}()
+	defer func() {
+		if err := recover(); err != nil {
+			if t.log != nil {
+				t.log.Info(t.Info()+" panic: %v", err)
+			}
+			debug.PrintStack() //堆栈跟踪
+			callback(FailureCode, "task panic:"+fmt.Sprintf("%v", err))
+		}
+	}()
+	if t.fn == nil {
+		callback(FailureCode, "task handler is nil")
+		return
+	}
+	msg, err := t.fn(t.Ext, t.Param)
+	if err == nil && t.Ext != nil && t.Ext.Err() != nil {
+		err = t.Ext.Err()
+	}
+	if err != nil {
+		if msg != "" {
+			callback(FailureCode, msg+": "+err.Error())
+			return
+		}
+		callback(FailureCode, err.Error())
+		return
+	}
+	callback(SuccessCode, msg)
 }
 
 // Info 任务信息

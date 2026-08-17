@@ -13,6 +13,7 @@ type Options struct {
 	ExecutorPort string        `json:"executor_port"` //本地(执行器)端口
 	RegistryKey  string        `json:"registry_key"`  //执行器名称
 	LogDir       string        `json:"log_dir"`       //日志目录
+	PHPBin       string        `json:"php_bin"`       // PHP 可执行文件，默认 php
 
 	l Logger //日志处理
 }
@@ -22,6 +23,7 @@ func newOptions(opts ...Option) Options {
 		ExecutorIp:   ipv4.LocalIP(),
 		ExecutorPort: DefaultExecutorPort,
 		RegistryKey:  DefaultRegistryKey,
+		PHPBin:       DefaultPHPBin,
 	}
 
 	for _, o := range opts {
@@ -40,6 +42,7 @@ type Option func(o *Options)
 var (
 	DefaultExecutorPort = "9999"
 	DefaultRegistryKey  = "golang-jobs"
+	DefaultPHPBin       = "php"
 )
 
 // ServerAddr 设置调度中心地址
@@ -81,5 +84,19 @@ func RegistryKey(registryKey string) Option {
 func SetLogger(l Logger) Option {
 	return func(o *Options) {
 		o.l = l
+	}
+}
+
+// LogDir 设置 GLUE 脚本与日志目录
+func LogDir(dir string) Option {
+	return func(o *Options) {
+		o.LogDir = dir
+	}
+}
+
+// PHPBin 设置 PHP 可执行文件路径
+func PHPBin(bin string) Option {
+	return func(o *Options) {
+		o.PHPBin = bin
 	}
 }

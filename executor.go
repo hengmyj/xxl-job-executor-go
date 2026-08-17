@@ -3,6 +3,7 @@ package xxl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -115,7 +116,7 @@ func (e *executor) RegTask(pattern string, task TaskFunc) {
 	return
 }
 
-//运行一个任务
+// 运行一个任务
 func (e *executor) runTask(writer http.ResponseWriter, request *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -128,9 +129,10 @@ func (e *executor) runTask(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	e.log.Info("任务参数:%v", param)
-	if !e.regList.Exists(param.ExecutorHandler) {
-		_, _ = writer.Write(returnCall(param, 500, "Task not registered"))
-		e.log.Error("任务[" + Int64ToStr(param.JobID) + "]没有注册:" + param.ExecutorHandler)
+	task, err := e.newRunTask(param)
+	if err != nil {
+		_, _ = writer.Write(returnCall(param, FailureCode, err.Error()))
+		e.log.Error("任务[" + Int64ToStr(param.JobID) + "]启动失败:" + err.Error())
 		return
 	}
 
@@ -143,14 +145,13 @@ func (e *executor) runTask(writer http.ResponseWriter, request *http.Request) {
 				e.runList.Del(Int64ToStr(oldTask.Id))
 			}
 		} else { //单机串行,丢弃后续调度 都进行阻塞
-			_, _ = writer.Write(returnCall(param, 500, "There are tasks running"))
+			_, _ = writer.Write(returnCall(param, FailureCode, "There are tasks running"))
 			e.log.Error("任务[" + Int64ToStr(param.JobID) + "]已经在运行了:" + param.ExecutorHandler)
 			return
 		}
 	}
 
 	cxt := context.Background()
-	task := e.regList.Get(param.ExecutorHandler)
 	if param.ExecutorTimeout > 0 {
 		task.Ext, task.Cancel = context.WithTimeout(cxt, time.Duration(param.ExecutorTimeout)*time.Second)
 	} else {
@@ -158,6 +159,9 @@ func (e *executor) runTask(writer http.ResponseWriter, request *http.Request) {
 	}
 	task.Id = param.JobID
 	task.Name = param.ExecutorHandler
+	if task.Name == "" && isPHPGlue(param.GlueType) {
+		task.Name = GlueTypePHP
+	}
 	task.Param = param
 	task.log = e.log
 
@@ -169,7 +173,21 @@ func (e *executor) runTask(writer http.ResponseWriter, request *http.Request) {
 	_, _ = writer.Write(returnGeneral())
 }
 
-//删除一个任务
+func (e *executor) newRunTask(param *RunReq) (*Task, error) {
+	if isPHPGlue(param.GlueType) {
+		if strings.TrimSpace(param.GlueSource) == "" {
+			return nil, fmt.Errorf("php glue source is empty")
+		}
+		return &Task{fn: e.runPHP}, nil
+	}
+	if !e.regList.Exists(param.ExecutorHandler) {
+		return nil, fmt.Errorf("Task not registered")
+	}
+	reg := e.regList.Get(param.ExecutorHandler)
+	return &Task{fn: reg.fn}, nil
+}
+
+// 删除一个任务
 func (e *executor) killTask(writer http.ResponseWriter, request *http.Request) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -187,7 +205,7 @@ func (e *executor) killTask(writer http.ResponseWriter, request *http.Request) {
 	_, _ = writer.Write(returnGeneral())
 }
 
-//任务日志
+// 任务日志
 func (e *executor) taskLog(writer http.ResponseWriter, request *http.Request) {
 	var res *LogRes
 	data, err := ioutil.ReadAll(request.Body)
@@ -240,7 +258,7 @@ func (e *executor) idleBeat(writer http.ResponseWriter, request *http.Request) {
 	_, _ = writer.Write(returnGeneral())
 }
 
-//注册执行器到调度中心
+// 注册执行器到调度中心
 func (e *executor) registry() {
 
 	t := time.NewTimer(time.Second * 0) //初始立即执行
@@ -281,7 +299,7 @@ func (e *executor) registry() {
 	}
 }
 
-//执行器注册摘除
+// 执行器注册摘除
 func (e *executor) registryRemove() {
 	t := time.NewTimer(time.Second * 0) //初始立即执行
 	defer t.Stop()
@@ -303,21 +321,24 @@ func (e *executor) registryRemove() {
 	_ = res.Body.Close()
 }
 
-//回调任务列表
+// 回调任务列表
 func (e *executor) callback(task *Task, code int64, msg string) {
+	defer e.runList.Del(Int64ToStr(task.Id))
 	res, err := e.post("/api/callback", string(returnCall(task.Param, code, msg)))
 	if err != nil {
 		e.log.Error("callback err : ", err.Error())
+		return
 	}
+	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		e.log.Error("callback ReadAll err : ", err.Error())
+		return
 	}
-	e.runList.Del(Int64ToStr(task.Id))
 	e.log.Info("任务回调成功:" + string(body))
 }
 
-//post
+// post
 func (e *executor) post(action, body string) (resp *http.Response, err error) {
 	request, err := http.NewRequest("POST", e.opts.ServerAddr+action, strings.NewReader(body))
 	if err != nil {
