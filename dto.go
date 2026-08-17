@@ -1,6 +1,14 @@
 package xxl
 
-//通用响应
+const (
+	SuccessCode int64 = 200
+	FailureCode int64 = 500
+
+	GlueTypeBean = "BEAN"
+	GlueTypePHP  = "GLUE_PHP"
+)
+
+// 通用响应
 type res struct {
 	Code int64       `json:"code"` // 200 表示正常、其他失败
 	Msg  interface{} `json:"msg"`  // 错误提示消息
@@ -15,7 +23,7 @@ type Registry struct {
 	RegistryValue string `json:"registryValue"`
 }
 
-//执行器执行完任务后，回调任务结果时使用
+// 执行器执行完任务后，回调任务结果时使用
 type call []*callElement
 
 type callElement struct {
@@ -35,7 +43,7 @@ type ExecuteResult struct {
 
 /*****************  下行参数  *********************/
 
-//阻塞处理策略
+// 阻塞处理策略
 const (
 	serialExecution = "SERIAL_EXECUTION" //单机串行
 	discardLater    = "DISCARD_LATER"    //丢弃后续调度
@@ -58,12 +66,12 @@ type RunReq struct {
 	BroadcastTotal        int64  `json:"broadcastTotal"`        // 分片参数：总分片
 }
 
-//终止任务请求参数
+// 终止任务请求参数
 type killReq struct {
 	JobID int64 `json:"jobId"` // 任务ID
 }
 
-//忙碌检测请求参数
+// 忙碌检测请求参数
 type idleBeatReq struct {
 	JobID int64 `json:"jobId"` // 任务ID
 }
